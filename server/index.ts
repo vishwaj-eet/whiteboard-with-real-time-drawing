@@ -25,6 +25,19 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const server = createServer(app);
+
+// ==== Define allowed origins here ====
+const allowedOrigins = [
+  'https://collaborative-whiteboard-with-real-three.vercel.app',
+  'https://collaborative-whiteboard-with-real-rho.vercel.app',
+  'https://collaborative-whiteboard-with-real-time-6jj8.onrender.com',
+  'https://collaborative-whiteboard-with-real-time-8zp4.onrender.com',
+  // Add your production frontend domain here:
+  'https://whiteboard-with-real-time-drawing.vercel.app',
+  'http://localhost:5173'
+];
+
+// ==== SOCKET.IO CORS CONFIG ====
 const io = new Server<
   ClientToServerEvents,
   ServerToClientEvents,
@@ -32,25 +45,15 @@ const io = new Server<
   SocketData
 >(server, {
   cors: {
-    origin: [
-      'https://collaborative-whiteboard-with-real-three.vercel.app',
-      'https://collaborative-whiteboard-with-real-rho.vercel.app',
-      'https://collaborative-whiteboard-with-real-time-6jj8.onrender.com',
-      'https://collaborative-whiteboard-with-real-time-8zp4.onrender.com',
-      'http://localhost:5173'
-    ],
+    origin: allowedOrigins,
     methods: ['GET', 'POST'],
     credentials: true
   }
 });
+
+// ==== EXPRESS CORS CONFIG ====
 app.use(cors({
-  origin: [
-    'https://collaborative-whiteboard-with-real-three.vercel.app',
-    'https://collaborative-whiteboard-with-real-rho.vercel.app',
-    'https://collaborative-whiteboard-with-real-time-6jj8.onrender.com',
-    'https://collaborative-whiteboard-with-real-time-8zp4.onrender.com',
-    'http://localhost:5173'
-  ],
+  origin: allowedOrigins,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
@@ -60,6 +63,7 @@ app.use((req, res, next) => {
   console.log(`${req.method} ${req.path} - ${req.headers.origin || 'no origin'}`);
   next();
 });
+
 app.get('/api/health', (req, res) => {
   res.json({ 
     status: 'ok', 
@@ -74,11 +78,13 @@ if (process.env.NODE_ENV === 'production') {
   console.log('Serving static files from:', staticPath);
   app.use(express.static(staticPath));
 }
+
 const dbManager = new DatabaseManager();
 const authManager = new AuthManager();
 const roomManager = new RoomManager(dbManager);
 const whiteboardManager = new WhiteboardManager(dbManager);
 await dbManager.initialize();
+
 io.on('connection', (socket) => {
   console.log(`User connected: ${socket.id}`);
 
@@ -155,12 +161,14 @@ io.on('connection', (socket) => {
     await whiteboardManager.addElement(roomId, data.element);
     socket.to(roomId).emit('text-added', { element: data.element, userId });
   });
+
   socket.on('clear-canvas', async () => {
     const { roomId } = socket.data;
     if (!roomId) return;
     await whiteboardManager.clearRoom(roomId);
     socket.to(roomId).emit('canvas-cleared');
   });
+
   socket.on('cursor-move', (data) => {
     const { roomId, userId } = socket.data;
     if (!roomId || !userId) return;
@@ -169,6 +177,7 @@ io.on('connection', (socket) => {
       position: data.position
     });
   });
+
   socket.on('disconnect', async () => {
     console.log(`User disconnected: ${socket.id}`);
     const { roomId, userId } = socket.data;
@@ -177,6 +186,7 @@ io.on('connection', (socket) => {
     }
   });
 });
+
 async function handleUserLeave(socket: any, roomId: string, userId: string) {
   try {
     await roomManager.removeUserFromRoom(roomId, userId);
@@ -228,6 +238,7 @@ app.get('/api/rooms/:roomId', async (req, res) => {
     res.status(500).json({ success: false, error: 'Failed to get room' });
   }
 });
+
 if (process.env.NODE_ENV === 'production') {
   app.get('*', (req, res) => {
     const indexPath = path.join(__dirname, '../../dist/index.html');
